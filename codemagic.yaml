@@ -2,12 +2,13 @@ workflows:
   simulator-native-ios:
     name: iOS simulator build
     max_build_duration: 120
-    instance_type: mac_mini_m1
+    instance_type: macOS M1 VM
     environment:
       vars:
         XCODE_WORKSPACE: "your_workspace_name.xcworkspace"
         XCODE_SCHEME: "your_workspace_name"
-      xcode: 15.3
+      xcode: 13.0
+    scripts:
       - name: Build the .app
         script: | 
           xcodebuild build \
