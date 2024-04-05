@@ -9,7 +9,7 @@ workflows:
         XCODE_SCHEME: "your_workspace_name"
       xcode: 15.3
   scripts:
-    - name: Build unsigned .app
+    - name: Build unsigned.app
       script: | 
         xcodebuild -workspace "ios/Runner.xcworkspace" \
           -scheme "$XCODE_SCHEME" \
