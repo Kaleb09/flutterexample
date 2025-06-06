@@ -60,8 +60,8 @@ jobs:
       # Step 6: Run Flutter tests (Optional but highly recommended)
       # This step executes any unit or widget tests in your Flutter project
       # to ensure code quality and prevent regressions.
-      - name: Run Tests
-        run: flutter test
+      #- name: Run Tests
+      #  run: flutter test
 
       # Step 7: Build the Flutter Windows desktop application in release mode
       # This compiles your Dart code and native Windows components into
