@@ -71,7 +71,8 @@ jobs:
       - name: Zip Windows Build for Release
         shell: powershell # Explicitly use PowerShell for this command
         run: |
-          $sourcePath = "build/windows/runner/Release"
+          # Corrected path to the build output
+          $sourcePath = "build/windows/x64/runner/Release"
           $zipFilePath = "build/windows/runner/windows-app-v${{ github.run_number }}.zip"
           Compress-Archive -Path $sourcePath\* -DestinationPath $zipFilePath
 
