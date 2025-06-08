@@ -2,10 +2,6 @@
 
 name: Flutter Windows Desktop Build
 
-# This workflow will be triggered on:
-# - Every push to the 'main' branch
-# - Every pull request targeting the 'main' branch
-# - Manually via the 'workflow_dispatch' button in the GitHub Actions UI
 on:
   push:
     branches:
@@ -15,93 +11,60 @@ on:
       - main
   workflow_dispatch:
 
-# Define a single job specifically for building the Windows desktop application
 jobs:
   build_windows:
     name: Build Windows App
-    # Runs on the latest available Windows virtual machine provided by GitHub
     runs-on: windows-latest
 
     steps:
-      # Step 1: Checkout the repository code
-      # This action retrieves your project's code from the GitHub repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Java Development Kit (JDK)
-      # Some Flutter build processes (especially those involving Gradle or native tools)
-      # might require a JDK. Using Temurin distribution with Java 17.
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # Step 3: Set up Flutter environment
-      # This action installs the Flutter SDK and configures the environment PATH.
-      # 'stable' channel is generally recommended for production builds.
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          # Optional: Pin to a specific Flutter version if needed, e.g., flutter-version: '3.19.0'
 
-      # Step 4: Enable Windows desktop support for Flutter
-      # This command explicitly configures the Flutter environment on the runner
-      # to allow building for Windows desktop.
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
-      # Step 5: Get Flutter package dependencies
-      # Downloads all packages listed in your pubspec.yaml file.
       - name: Get Dependencies
         run: flutter pub get
 
-      # The "Run Tests" step has been removed as requested.
-
-      # Step 6: Build the Flutter Windows desktop application in release mode
-      # This compiles your Dart code and native Windows components into
-      # an executable application bundle.
       - name: Build Windows Release App
         run: flutter build windows --release
 
-      # Step 7: Zip the build output for release
-      # For GitHub Releases, it's common to package the entire application folder
-      # into a single .zip file. This uses PowerShell's Compress-Archive.
       - name: Zip Windows Build for Release
-        shell: powershell # Explicitly use PowerShell for this command
+        shell: powershell
         run: |
-          # Define paths
           $sourcePath = "build/windows/x64/runner/Release"
           $zipFileName = "windows-app-v${{ github.run_number }}.zip"
-          $destinationDir = "build/windows/runner" # Directory where the zip will be placed
+          $destinationDir = "build/windows/runner"
           $zipFilePath = "$destinationDir/$zipFileName"
 
-          # Create the destination directory if it doesn't exist
           if (-not (Test-Path -Path $destinationDir -PathType Container)) {
               New-Item -Path $destinationDir -ItemType Directory -Force
           }
 
-          # Compress the archive
           Compress-Archive -Path "$sourcePath\*" -DestinationPath $zipFilePath
 
-      # Step 8: Upload the zipped Windows application to a GitHub Release
-      # This action creates or updates a GitHub Release and attaches the
-      # specified file as an asset, similar to your iOS workflow.
-      - name: Upload Release Asset
-        uses: svenstaro/upload-release-action@v2
+      # NEW STEP: Create GitHub Release and Upload Asset
+      - name: Create Release and Upload Windows Asset
+        uses: softprops/action-gh-release@v1 # Use action-gh-release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' # Only create on tag pushes or manual trigger
         with:
-          # This token is automatically provided by GitHub Actions for the repository
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          # The tag for the release. Using 'v' + the workflow run number for simplicity.
-          # For a more robust solution, consider integrating a versioning strategy (e.g., from pubspec.yaml).
-          tag: v${{ github.run_number }}
-          # The path to the zipped artifact created in the previous step
-          file: build/windows/runner/windows-app-v${{ github.run_number }}.zip
-          # Overwrite the asset if it already exists (useful for re-runs)
-          overwrite: true
-          # A body for the release description
+          tag_name: v${{ github.run_number }} # This will create the tag if it doesn't exist
+          name: Release v${{ github.run_number }}
           body: |
             Automated Windows Desktop build for run number ${{ github.run_number }}.
             This release contains the compiled Windows application.
             For more details, see the workflow run.
+          files: build/windows/runner/windows-app-v${{ github.run_number }}.zip # Specify the file to upload
+          draft: false # Set to true if you want to manually publish later
+          prerelease: false # Set to true if this is a pre-release
