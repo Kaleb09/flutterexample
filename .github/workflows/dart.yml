@@ -71,10 +71,19 @@ jobs:
       - name: Zip Windows Build for Release
         shell: powershell # Explicitly use PowerShell for this command
         run: |
-          # Corrected path to the build output
+          # Define paths
           $sourcePath = "build/windows/x64/runner/Release"
-          $zipFilePath = "build/windows/runner/windows-app-v${{ github.run_number }}.zip"
-          Compress-Archive -Path $sourcePath\* -DestinationPath $zipFilePath
+          $zipFileName = "windows-app-v${{ github.run_number }}.zip"
+          $destinationDir = "build/windows/runner" # Directory where the zip will be placed
+          $zipFilePath = "$destinationDir/$zipFileName"
+
+          # Create the destination directory if it doesn't exist
+          if (-not (Test-Path -Path $destinationDir -PathType Container)) {
+              New-Item -Path $destinationDir -ItemType Directory -Force
+          }
+
+          # Compress the archive
+          Compress-Archive -Path "$sourcePath\*" -DestinationPath $zipFilePath
 
       # Step 8: Upload the zipped Windows application to a GitHub Release
       # This action creates or updates a GitHub Release and attaches the
