@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       android_project_path:
-        description: 'Path to your Android project root (e.g., "android" or "." if at repo root)'
+        description: 'Path to your Android project root relative to your Flutter project root (e.g., "android")'
         required: true
-        default: 'android' # Default to 'android' subdirectory, change if your project is at root or different path
+        default: 'android' # Default to 'android' subdirectory within your Flutter project
 
 # A workflow run is made up of one or more jobs.
 jobs:
@@ -42,12 +42,18 @@ jobs:
           distribution: 'temurin' # A popular OpenJDK distribution
           java-version: '17'      # Specify the JDK version required for your Android project
 
-      # Step 3: Make the Gradle wrapper executable.
+      # Step 3: Regenerate Flutter project files (including gradlew if missing).
+      # This command should be run from the root of your Flutter project (which is usually the repository root).
+      - name: Regenerate Flutter project files
+        run: flutter create .
+
+      # Step 4: Make the Gradle wrapper executable.
       # Use the 'android_project_path' input to locate gradlew.
+      # Note: This path is relative to the repository root.
       - name: Make gradlew executable
         run: chmod +x ${{ github.event.inputs.android_project_path }}/gradlew
 
-      # Step 4: Build the Android application in release mode.
+      # Step 5: Build the Android application in release mode.
       # This action uses Gradle to build the unsigned APK.
       # 'assembleRelease' builds the APK.
       # The 'gradle/gradle-build-action@v2' handles caching and proper Gradle setup.
@@ -58,7 +64,7 @@ jobs:
           arguments: assembleRelease
           working-directory: ${{ github.event.inputs.android_project_path }} # Set the working directory
 
-      # Step 5: Create a GitHub Release and upload the unsigned APK.
+      # Step 6: Create a GitHub Release and upload the unsigned APK.
       # This action creates a new release on GitHub and attaches the unsigned APK
       # file as an asset to that release.
       # NOTE: When triggered manually, github.ref_name will be the branch name (e.g., 'main').
