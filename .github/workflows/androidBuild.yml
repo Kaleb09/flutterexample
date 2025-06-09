@@ -14,6 +14,11 @@ on:
       - 'v*.*.*' # Matches tags like v1.0.0, v1.0.1, v2.3.4, etc.
   # Allows you to run this workflow manually from the GitHub Actions UI.
   workflow_dispatch:
+    inputs:
+      android_project_path:
+        description: 'Path to your Android project root (e.g., "android" or "." if at repo root)'
+        required: true
+        default: 'android' # Default to 'android' subdirectory, change if your project is at root or different path
 
 # A workflow run is made up of one or more jobs.
 jobs:
@@ -38,21 +43,20 @@ jobs:
           java-version: '17'      # Specify the JDK version required for your Android project
 
       # Step 3: Make the Gradle wrapper executable.
-      # The gradlew script needs executable permissions to run on Linux runners.
-      # Assuming gradlew is in an 'android/' subdirectory. Adjust path if different.
+      # Use the 'android_project_path' input to locate gradlew.
       - name: Make gradlew executable
-        run: chmod +x ./android/gradlew
+        run: chmod +x ${{ github.event.inputs.android_project_path }}/gradlew
 
       # Step 4: Build the Android application in release mode.
       # This action uses Gradle to build the unsigned APK.
       # 'assembleRelease' builds the APK.
       # The 'gradle/gradle-build-action@v2' handles caching and proper Gradle setup.
-      # Working directory is set to 'android/' to run Gradle commands from there.
+      # Working directory is set using the 'android_project_path' input.
       - name: Build unsigned Release APK
         uses: gradle/gradle-build-action@v2
         with:
           arguments: assembleRelease
-          working-directory: android # Set the working directory to your Android project root
+          working-directory: ${{ github.event.inputs.android_project_path }} # Set the working directory
 
       # Step 5: Create a GitHub Release and upload the unsigned APK.
       # This action creates a new release on GitHub and attaches the unsigned APK
@@ -66,8 +70,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           # Path to the unsigned release APK file.
-          # Adjusted path to include 'android/' subdirectory.
-          files: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          # Adjusted path to use the 'android_project_path' input.
+          files: ${{ github.event.inputs.android_project_path }}/app/build/outputs/apk/release/app-release-unsigned.apk
           tag_name: ${{ github.ref_name }} # Uses the pushed tag name or branch name for the release tag
           name: Release ${{ github.ref_name }} # Uses the pushed tag name or branch name for the release title
           body: | # Markdown content for the release description
@@ -92,5 +96,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Unsigned-APK
-          # Adjusted path to include 'android/' subdirectory.
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          # Adjusted path to use the 'android_project_path' input.
+          path: ${{ github.event.inputs.android_project_path }}/app/build/outputs/apk/release/app-release-unsigned.apk
