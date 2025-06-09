@@ -1,9 +1,9 @@
 # .github/workflows/android_release.yml
 
-# This workflow is responsible for building and releasing
-# an unsigned Android application APK on GitHub.
+# This workflow is responsible for building, signing, and releasing
+# your Android application on GitHub.
 
-name: Android Unsigned Release Build
+name: Android Release Build
 
 # Controls when the workflow will run.
 on:
@@ -12,13 +12,6 @@ on:
   push:
     tags:
       - 'v*.*.*' # Matches tags like v1.0.0, v1.0.1, v2.3.4, etc.
-  # Allows you to run this workflow manually from the GitHub Actions UI.
-  workflow_dispatch:
-    inputs:
-      android_project_path:
-        description: 'Path to your Android project root relative to your Flutter project root (e.g., "android")'
-        required: true
-        default: 'android' # Default to 'android' subdirectory within your Flutter project
 
 # A workflow run is made up of one or more jobs.
 jobs:
@@ -42,53 +35,64 @@ jobs:
           distribution: 'temurin' # A popular OpenJDK distribution
           java-version: '17'      # Specify the JDK version required for your Android project
 
-      # Step 3: Regenerate Flutter project files (including gradlew if missing).
-      # This command should be run from the root of your Flutter project (which is usually the repository root).
-      - name: Regenerate Flutter project files
-        run: flutter create .
-
-      # Step 4: Make the Gradle wrapper executable.
-      # Use the 'android_project_path' input to locate gradlew.
-      # Note: This path is relative to the repository root.
+      # Step 3: Make the Gradle wrapper executable.
+      # The gradlew script needs executable permissions to run on Linux runners.
       - name: Make gradlew executable
-        run: chmod +x ${{ github.event.inputs.android_project_path }}/gradlew
+        run: chmod +x ./gradlew
 
-      # Step 5: Build the Android application in release mode.
-      # This action uses Gradle to build the unsigned APK.
-      # 'assembleRelease' builds the APK.
+      # Step 4: Build the Android application in release mode.
+      # This action uses Gradle to build both the APK and Android App Bundle (AAB).
+      # 'assembleRelease' builds the APK, 'bundleRelease' builds the AAB.
       # The 'gradle/gradle-build-action@v2' handles caching and proper Gradle setup.
-      # Working directory is set using the 'android_project_path' input.
-      - name: Build unsigned Release APK
+      - name: Build release AAB and APK
         uses: gradle/gradle-build-action@v2
         with:
-          arguments: assembleRelease
-          working-directory: ${{ github.event.inputs.android_project_path }} # Set the working directory
+          arguments: assembleRelease bundleRelease
 
-      # Step 6: Create a GitHub Release and upload the unsigned APK.
-      # This action creates a new release on GitHub and attaches the unsigned APK
-      # file as an asset to that release.
-      # NOTE: When triggered manually, github.ref_name will be the branch name (e.g., 'main').
-      # If you want a specific tag name for manual releases, you'd need to add an
-      # input to workflow_dispatch and use that input here.
+      # Step 5: Sign the Android release artifacts.
+      # This action simplifies the process of signing your APK/AAB using your keystore
+      # and credentials securely stored as GitHub Secrets.
+      - name: Sign Android Release
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app # Assign an ID to this step to reference its outputs later
+        with:
+          # Directory where the unsigned APK/AAB files are located.
+          # Adjust this path if your project structure is different.
+          releaseDirectory: app/build/outputs/bundle/release # Or app/build/outputs/apk/release for APKs only
+          # Base64 encoded content of your Android keystore file (.jks or .keystore).
+          signingKeyBase64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          # The alias of the key within your keystore.
+          alias: ${{ secrets.SIGNING_KEY_ALIAS }}
+          # The password for your keystore.
+          keyStorePassword: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          # The password for the key within your keystore.
+          keyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+      # Step 6: Create a GitHub Release and upload signed artifacts.
+      # This action creates a new release on GitHub and attaches the signed APK/AAB
+      # files as assets to that release.
       - name: Create GitHub Release
-        # This step runs if the workflow was triggered by a tag push OR manually.
-        # For manual triggers, the tag_name will default to the branch name.
+        # This step only runs if the workflow was triggered by a tag push.
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          # Path to the unsigned release APK file.
-          # Adjusted path to use the 'android_project_path' input.
-          files: ${{ github.event.inputs.android_project_path }}/app/build/outputs/apk/release/app-release-unsigned.apk
-          tag_name: ${{ github.ref_name }} # Uses the pushed tag name or branch name for the release tag
-          name: Release ${{ github.ref_name }} # Uses the pushed tag name or branch name for the release title
+          # Paths to the signed release files. These outputs are provided by the
+          # 'sign-android-release' action.
+          files: |
+            ${{ steps.sign_app.outputs.signedReleaseFile }}     # Path to the signed AAB file
+            ${{ steps.sign_app.outputs.signedReleaseApkFile }} # Path to the signed APK file
+          tag_name: ${{ github.ref_name }} # Uses the pushed tag name as the release tag
+          name: Release ${{ github.ref_name }} # Uses the pushed tag name as the release title
           body: | # Markdown content for the release description
-            🎉 New Unsigned Release: ${{ github.ref_name }} 🎉
+            🎉 New Release: ${{ github.ref_name }} 🎉
 
             ### What's New:
             (Add your release notes here. You can also automate this by parsing
             a CHANGELOG.md file or commit messages in a prior step.)
 
             ### Downloads:
-            - app-release-unsigned.apk
+            - app-release.aab
+            - app-release.apk
           draft: false      # Set to 'true' to create a draft release (not published immediately)
           prerelease: false # Set to 'true' for pre-release versions (e.g., betas)
         env:
@@ -96,11 +100,12 @@ jobs:
           # with permissions to create releases and upload assets.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Optional Step: Upload Unsigned APK as a separate workflow artifact (for debugging or archival purposes).
-      # This creates a separate artifact bundle in the workflow run, not attached to the GitHub Release.
-      - name: Upload Unsigned APK Artifact
+      # Optional Step: Upload Unsigned Artifacts (for debugging or archival purposes).
+      # This creates a separate artifact bundle in the workflow run, not attached to the release.
+      - name: Upload Unsigned Artifacts (Optional)
         uses: actions/upload-artifact@v4
         with:
-          name: Unsigned-APK
-          # Adjusted path to use the 'android_project_path' input.
-          path: ${{ github.event.inputs.android_project_path }}/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: Unsigned-APK-AAB
+          path: |
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/bundle/release/app-release-unsigned.aab
